@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Credit Card Fraud — Demo</title>
+  <style>
+    :root{
+      --bg:#f4f7fb;
+      --card:#ffffff;
+      --accent:#5b8def;
+      --muted:#6b7280;
+      --good:#16a34a;
+      --bad:#dc2626;
+    }
+    body{
+      margin:0;
+      font-family: Inter, Arial, sans-serif;
+      background: linear-gradient(180deg,#eef4ff 0%,var(--bg) 100%);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-height:100vh;
+      padding:24px;
+    }
+    .card{
+      background:var(--card);
+      width:980px;
+      max-width:100%;
+      border-radius:14px;
+      box-shadow:0 10px 30px rgba(16,24,40,0.08);
+      padding:24px;
+    }
+    .header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+    }
+    .title{
+      font-size:20px;
+      font-weight:700;
+      color:#0f172a;
+    }
+    .desc{ color:var(--muted); font-size:13px }
+
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:18px;
+      margin-top:18px;
+    }
+
+    .box{
+      background:#fbfdff;
+      border:1px solid #eef2ff;
+      padding:14px;
+      border-radius:10px;
+    }
+    label{ font-size:13px; color:#334155; display:block; margin-bottom:6px; font-weight:600 }
+    input[type="number"]{
+      width:100%;
+      padding:10px 12px;
+      border-radius:8px;
+      border:1px solid #e6eefb;
+      font-size:14px;
+      outline:none;
+    }
+    .v-grid{
+      display:grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap:10px;
+      margin-top:8px;
+    }
+
+    .actions{
+      display:flex;
+      gap:12px;
+      margin-top:18px;
+      align-items:center;
+    }
+    button{
+      background:var(--accent);
+      color:white;
+      border:none;
+      padding:10px 18px;
+      border-radius:10px;
+      cursor:pointer;
+      font-weight:600;
+      box-shadow:0 6px 18px rgba(91,141,239,0.18);
+    }
+    button:disabled{ opacity:0.6; cursor:not-allowed }
+
+    .result{
+      margin-top:18px;
+      padding:14px;
+      border-radius:10px;
+      background:#0f172a10;
+      font-weight:600;
+    }
+    .prob{
+      font-size:20px;
+      margin-top:6px;
+    }
+    .small{ font-size:13px; color:var(--muted) }
+    footer{ text-align:right; font-size:12px; color:var(--muted); margin-top:14px }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div>
+        <div class="title">Credit Card Fraud Detection — Demo</div>
+        <div class="desc">Enter transaction features (Time, Amount, V1..V28) and click <b>Check Fraud</b>.</div>
+      </div>
+      <div class="small">Model: served by FastAPI</div>
+    </div>
+
+    <div class="grid">
+      <div class="box">
+        <label>Time</label>
+        <input id="Time" type="number" value="10000" step="any">
+
+        <label style="margin-top:12px">Amount</label>
+        <input id="Amount" type="number" value="149.62" step="any">
+
+        <div style="margin-top:12px" class="small">Tip: leave V-values as 0 for quick demo. Values come from the Kaggle dataset PCA features.</div>
+      </div>
+
+      <div class="box">
+        <label>Prediction</label>
+        <div class="result" id="result">
+          <div class="small">No prediction yet — click <b>Check Fraud</b></div>
+        </div>
+
+        <div style="margin-top:12px" class="small">You can use the API docs at <code>/docs</code> to test directly too.</div>
+      </div>
+    </div>
+
+    <div style="margin-top:14px" class="box">
+      <label>V1 — V28 (features)</label>
+      <div class="v-grid" id="vgrid"></div>
+    </div>
+
+    <div class="actions">
+      <button id="checkBtn">Check Fraud</button>
+      <button id="resetBtn" style="background:#e6eefb; color:#0f172a">Reset</button>
+      <div style="flex:1"></div>
+      <div class="small">Server: <span id="serverStatus">checking...</span></div>
+    </div>
+
+    <footer>Project demo • use real dataset values for accurate results</footer>
+  </div>
+
+  <script>
+    const EXPECTED = ["Time","Amount"];
+    for(let i=1;i<=28;i++) EXPECTED.push("V"+i);
+
+    // create V1..V28 inputs dynamically
+    const vgrid = document.getElementById("vgrid");
+    for(let i=1;i<=28;i++){
+      const wrapper = document.createElement("div");
+      const label = document.createElement("label");
+      label.style.fontSize="12px";
+      label.style.fontWeight="600";
+      label.style.display="block";
+      label.style.marginBottom="6px";
+      label.innerText = "V" + i;
+      const input = document.createElement("input");
+      input.type = "number";
+      input.id = "V"+i;
+      input.value = "0";
+      input.step = "any";
+      wrapper.appendChild(label);
+      wrapper.appendChild(input);
+      vgrid.appendChild(wrapper);
+    }
+
+    // server health check
+    async function checkServer(){
+      try{
+        const res = await fetch("/health");
+        const json = await res.json();
+        document.getElementById("serverStatus").innerText = json.status === "ok" ? "OK" : "ERROR";
+      }catch(e){
+        document.getElementById("serverStatus").innerText = "offline";
+      }
+    }
+    checkServer();
+
+    document.getElementById("checkBtn").addEventListener("click", async () => {
+      const btn = document.getElementById("checkBtn");
+      btn.disabled = true;
+      btn.innerText = "Checking...";
+      const data = {};
+      data["Time"] = parseFloat(document.getElementById("Time").value || 0);
+      data["Amount"] = parseFloat(document.getElementById("Amount").value || 0);
+      for(let i=1;i<=28;i++){
+        data["V"+i] = parseFloat(document.getElementById("V"+i).value || 0);
+      }
+
+      try {
+        const res = await fetch("/predict", {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({data})
+        });
+        const json = await res.json();
+        if(res.ok){
+          const pct = (json.fraud_probability*100).toFixed(2) + "%";
+          const flag = json.fraud_flag === 1 ? "⚠️ Fraud" : "✅ Legit";
+          const color = json.fraud_flag === 1 ? "var(--bad)" : "var(--good)";
+          document.getElementById("result").innerHTML = `
+            <div class="small">Probability</div>
+            <div class="prob" style="color:${color}">${pct}</div>
+            <div style="margin-top:8px">${flag} • Model: ${json.model} • Threshold: ${json.threshold}</div>
+          `;
+        } else {
+          document.getElementById("result").innerHTML = `<div style="color:var(--bad)"><b>Error:</b> ${json.detail || JSON.stringify(json)}</div>`;
+        }
+      } catch(err) {
+        document.getElementById("result").innerHTML = `<div style="color:var(--bad)"><b>Network error:</b> ${err}</div>`;
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "Check Fraud";
+        checkServer();
+      }
+    });
+
+    document.getElementById("resetBtn").addEventListener("click", () => {
+      document.getElementById("Time").value = 10000;
+      document.getElementById("Amount").value = 149.62;
+      for(let i=1;i<=28;i++) document.getElementById("V"+i).value = 0;
+      document.getElementById("result").innerHTML = `<div class="small">No prediction yet — click <b>Check Fraud</b></div>`;
+    });
+  </script>
+</body>
+</html>
